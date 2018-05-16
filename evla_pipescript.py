@@ -6,10 +6,11 @@ context.set_state('ProjectSummary', 'observatory', 'Karl G. Jansky Very Large Ar
 context.set_state('ProjectSummary', 'telescope', 'EVLA')
 context.set_state('ProjectSummary', 'piname', 'unknown')
 context.set_state('ProjectSummary', 'proposal_title', 'unknown')
-
-measurement_set = '18A-392.sb35010558.eb35403957.58250.264772800925'
+import os
+measurement_set = '18A-392.sb35213326.eb35411259.58253.14186105324'
 
 try:
+    os.system('tar -xvf %s.tar' % measurement_set)
     hifv_importdata(vis=[measurement_set], session=['session_1'])
     hifv_hanning(pipelinemode="automatic")
     hifv_flagdata(intents='*POINTING*,*FOCUS*,*ATMOSPHERE*,*SIDEBAND_RATIO*, *UNKNOWN*, *SYSTEM_CONFIGURATION*, *UNSPECIFIED#UNSPECIFIED*', hm_tbuff='manual', tbuff=0.225, fracspw=0.05, quack=False)
