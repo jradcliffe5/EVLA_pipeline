@@ -1,0 +1,211 @@
+<ProcessingProcedure>
+
+    <ProcedureTitle>hifv_minimal_flagging</ProcedureTitle>
+
+    <!-- hifv_flagdata deliberately OMITTED from this recipe.
+
+         Background: TLOW0001's calibrator scans (field 1: BP/phase/delay,
+         field 3: flux) come out of the stock recipe 100% flagged (weblog
+         stage3, job 2315), which starves hifv_testBPdcals of data and
+         crashes the run with "Table ...testdelayinitialgain_L.tbl does not
+         exist" (gaincal ran to completion but wrote no solutions/no table).
+
+         Verified via fast-check (isolated single-scan/subset tests, see
+         reduction/_fastcheck and reduction/_subreftest):
+           - template=False, quack=False alone: no measurable effect: still
+             ~100% flagged for Bandpass/Flux/Phase.
+           - online=False as well (removes ANOS + subreflector, the only two
+             agents with meaningful individual impact): STILL ~100% flagged.
+             None of hifv_flagdata's individual heuristics dominate alone;
+             the 100% is a compounding pile-up of several small, real,
+             mostly-independent problems (ANOS settle-time, a genuine
+             subreflector fault on ea14, shadowing, scattered zero-valued
+             cells on ea12/ea08) each touching different antennas at
+             different moments of the same short (~90-210s) calibrator
+             scans, which stacks fast via baseline-count non-linearity.
+           - Raw DATA confirmed NOT mostly zero anywhere (Bandpass/Flux/
+             Target all ~3.9% zero cells uniformly), so there is real usable
+             signal under nearly all of this flagging.
+           - hifv_flagdata skipped entirely (this recipe): gaincal succeeds
+             (184288-row caltable produced on the fast-check subset, vs. zero
+             rows with any tested flagging config). gaincal's own per-
+             solution SNR>=3 rejection is doing sensible quality control on
+             the unflagged data on its own (e.g. cleanly rejecting ~1-3/52
+             low-SNR solutions per timestamp in spw 14, vs. a real, separate
+             problem of ~30-40/52 rejected in spw 15 ; worth a look on its
+             own merits).
+
+         Residual risk: this admits data online-flagged for real reasons
+         (antennas still settling on source, the ea14 subreflector fault,
+         shadowed baselines) into the calibration solves. gaincal's SNR gate
+         provides some protection but is not a substitute for review;
+         check the stage3/stage6/stage9 weblog QA scores and the resulting
+         cal tables (esp. ea14/ea12/ea08 and spw 15) before trusting
+         products from this run for science. -->
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_importdata</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_hanning</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_vlasetjy</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_priorcals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_syspower</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_testBPdcals</Command>
+        <ParameterSet>
+            <!-- flagbaddef=False: skip the bad-deformatters baseband QA/flag
+                 sub-step (PIPE-1183 option). TLOW0001's SPECTRAL_WINDOW.NAME
+                 column lacks the "<band>#<baseband>#<spw>" naming this
+                 sub-step's weblog code assumes (pre-2013 EVLA metadata gap;
+                 pipeline logs show every spw as "Rx band Unknown ...
+                 Unknown"). With a real bad-baseband hit on ea06, the
+                 baseband-name parser hits spw.name.split('#')[1] on a name
+                 with no '#' -> IndexError, crashing job 2316 mid-run.
+                 Calibration itself (delay/BP/gain solves, applycal) is
+                 unaffected by disabling this QA-only sub-step. -->
+            <Parameter>
+                <Keyword xmlns="">flagbaddef</Keyword>
+                <Value xmlns="">False</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_checkflag</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">checkflagmode</Keyword>
+                <Value xmlns="">bpd-vla</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_semiFinalBPdcals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_checkflag</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">checkflagmode</Keyword>
+                <Value xmlns="">allcals-vla</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_solint</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_fluxboot</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_finalcals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_applycals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_checkflag</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">checkflagmode</Keyword>
+                <Value xmlns="">target-vla</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_statwt</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_plotsummary</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hif_makeimlist</Command>
+        <ParameterSet>
+           <Parameter>
+               <Keyword xmlns="">intent</Keyword>
+               <Value xmlns="">PHASE,BANDPASS</Value>
+           </Parameter>
+           <Parameter>
+               <Keyword xmlns="">specmode</Keyword>
+               <Value xmlns="">cont</Value>
+           </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hif_makeimages</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">hm_masking</Keyword>
+                <Value xmlns="">centralregion</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <!-- Split the calibrated data down to a TARGET-only MS (default
+             intent) for delivery. Produces <vis>_targets_cont.ms (continuum,
+             all target spws) and, if spectral-line spws were identified,
+             <vis>_targets.ms as well. Not exported by hifv_exportdata's
+             exportmses (that flag exports every MS in the context, not just
+             this one) -- run_vla_pipeline.slurm tars the split MS(es) it
+             finds in the run dir into products/ after the CASA run. -->
+        <Command xmlns="">hifv_mstransform</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_exportdata</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+</ProcessingProcedure>

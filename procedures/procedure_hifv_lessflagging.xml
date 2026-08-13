@@ -1,0 +1,201 @@
+<ProcessingProcedure>
+
+    <ProcedureTitle>hifv</ProcedureTitle>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_importdata</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+    
+    <ProcessingCommand>
+        <Command xmlns="">hifv_hanning</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_flagdata</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">hm_tbuff</Keyword>
+                <Value xmlns="">1.5int</Value>
+            </Parameter>
+            <Parameter>
+                <Keyword xmlns="">fracspw</Keyword>
+                <Value xmlns="">0.01</Value>
+            </Parameter>
+            <Parameter>
+                <Keyword xmlns="">intents</Keyword>
+                <Value xmlns="">*POINTING*,*FOCUS*,*ATMOSPHERE*,*SIDEBAND_RATIO*, *UNKNOWN*, *SYSTEM_CONFIGURATION*, *UNSPECIFIED#UNSPECIFIED*</Value>
+            </Parameter>
+            <!-- Added vs. stock procedure_hifv.xml: TLOW0001's calibrator scans
+                 (field 1: BP/phase/delay, field 3: flux) come out of the
+                 stock recipe 100% flagged (reduction weblog stage3, job
+                 2315), which starves hifv_testBPdcals of data and crashes
+                 it. VERIFIED by fast-check (isolated single-scan tests, see
+                 reduction/_fastcheck and reduction/_subreftest):
+                   template, quack : confirmed near-zero effect on their own;
+                                     turning them off alone does NOT fix the
+                                     100% flagging (tested, still ~100%).
+                   online (ANOS+subreflector) : ANOS alone flags ~19% of the
+                                     scans it touches (real "not on source"
+                                     settle time); subreflector alone is ~0%
+                                     except full-scan hits on 2 scans (real
+                                     hardware fault window on ea14/ea08).
+                                     Neither dominates alone; the ~100% is a
+                                     pile-up of several small, real, mostly
+                                     independent problems (ANOS + subreflector
+                                     + shadowing + scattered zero-valued
+                                     cells on ea14/ea12/ea08) each touching
+                                     different antennas at different moments
+                                     of the same short scan, compounding via
+                                     baseline-count non-linearity. Raw DATA
+                                     is confirmed NOT mostly zero anywhere
+                                     (Bandpass/Flux/Target all ~3.9% zero
+                                     cells), so there is real usable signal
+                                     under most of this flagging.
+                 See fastcheck2 (online=False, template=False, quack=False)
+                 for whether relaxing online recovers usable data; update
+                 this file's online parameter based on that result before
+                 trusting a full run built on it, and re-check the stage3
+                 weblog's flagged-data-summary table afterwards regardless. -->
+            <Parameter>
+                <Keyword xmlns="">template</Keyword>
+                <Value xmlns="">False</Value>
+            </Parameter>
+            <Parameter>
+                <Keyword xmlns="">quack</Keyword>
+                <Value xmlns="">False</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_vlasetjy</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+    
+    <ProcessingCommand>
+        <Command xmlns="">hifv_priorcals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_syspower</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_testBPdcals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+    
+    <ProcessingCommand>
+        <Command xmlns="">hifv_checkflag</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">checkflagmode</Keyword>
+                <Value xmlns="">bpd-vla</Value>
+            </Parameter>              
+        </ParameterSet>
+    </ProcessingCommand>
+    
+    <ProcessingCommand>
+        <Command xmlns="">hifv_semiFinalBPdcals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+    
+    <ProcessingCommand>
+        <Command xmlns="">hifv_checkflag</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">checkflagmode</Keyword>
+                <Value xmlns="">allcals-vla</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_solint</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_fluxboot</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_finalcals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_applycals</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_checkflag</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">checkflagmode</Keyword>
+                <Value xmlns="">target-vla</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_statwt</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hifv_plotsummary</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+    
+    <ProcessingCommand>
+        <Command xmlns="">hif_makeimlist</Command>
+        <ParameterSet>
+           <Parameter>
+               <Keyword xmlns="">intent</Keyword>
+               <Value xmlns="">PHASE,BANDPASS</Value>
+           </Parameter>
+           <Parameter>
+               <Keyword xmlns="">specmode</Keyword>
+               <Value xmlns="">cont</Value>
+           </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+
+    <ProcessingCommand>
+        <Command xmlns="">hif_makeimages</Command>
+        <ParameterSet>
+            <Parameter>
+                <Keyword xmlns="">hm_masking</Keyword>
+                <Value xmlns="">centralregion</Value>
+            </Parameter>
+        </ParameterSet>
+    </ProcessingCommand>
+    
+    <ProcessingCommand>
+        <Command xmlns="">hifv_exportdata</Command>
+        <ParameterSet>
+        </ParameterSet>
+    </ProcessingCommand>
+    
+
+</ProcessingProcedure>
