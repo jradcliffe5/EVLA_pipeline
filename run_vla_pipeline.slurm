@@ -176,7 +176,7 @@ N_CORES="${N_CORES:-${SLURM_CPUS_PER_TASK:-1}}"
 # recipes dir. Bare recipe names that aren't files here (e.g. the default
 # procedure_hifv.xml, shipped inside CASA) are left untouched so that
 # built-in fallback still applies to them.
-if [ -e "$PROCEDURE" ]; then
+if [ -f "$PROCEDURE" ]; then
     PROCEDURE=$(readlink -m "$PROCEDURE")
 fi
 
@@ -186,6 +186,43 @@ if [ ! -e "$SDM_PATH" ]; then
 fi
 if [ ! -x "$CASA" ]; then
     echo "ERROR: casa executable not found/executable at $CASA (check CASA_ROOT)" >&2
+    exit 1
+fi
+
+# --------------------------------------------------------------------------
+# Check the recipe actually exists *before* doing any expensive work (making
+# the run dir, extracting a multi-GB SDM tarball, starting MPI/CASA), rather
+# than letting recipereducer discover it minutes later and abort with
+# "Procedure not found:: <name>". This mirrors _get_processing_procedure()
+# in pipeline/recipereducer.py: an existing file wins (already resolved to
+# an absolute path above), otherwise the name is looked up in CASA's
+# built-in recipes dir.
+# --------------------------------------------------------------------------
+if [ -z "$PROCEDURE" ]; then
+    echo "ERROR: --procedure given with no value" >&2
+    usage
+    exit 1
+fi
+shopt -s nullglob
+RECIPES_DIRS=("$CASA_ROOT"/lib/py/lib/python3.*/site-packages/pipeline/recipes)
+shopt -u nullglob
+RECIPES_DIR="${RECIPES_DIRS[0]:-}"
+if [ -f "$PROCEDURE" ]; then
+    : # custom recipe given as an existing path -- nothing to look up
+elif [ -n "$RECIPES_DIR" ] && [ -f "$RECIPES_DIR/$PROCEDURE" ]; then
+    : # bare name shipped with CASA -- recipereducer will find it the same way
+else
+    echo "ERROR: procedure not found: $PROCEDURE" >&2
+    echo "       Not a file relative to the submission directory, and not a recipe in" >&2
+    if [ -n "$RECIPES_DIR" ]; then
+        echo "       $RECIPES_DIR" >&2
+        echo "       Recipes available there for the VLA (hifv):" >&2
+        for recipe in "$RECIPES_DIR"/procedure_hifv*.xml; do
+            [ -f "$recipe" ] && echo "         $(basename "$recipe")" >&2
+        done
+    else
+        echo "       $CASA_ROOT/lib/py/lib/python3.*/site-packages/pipeline/recipes (no such directory -- check CASA_ROOT)" >&2
+    fi
     exit 1
 fi
 if [ ! -x "$XVFB_BIN" ]; then
@@ -217,7 +254,7 @@ if [ -f "$SDM_PATH" ] && [[ "$SDM_PATH" == *.tar ]]; then
     EXTRACT_DIR="$RUNDIR/$SDM_NAME"
     echo "   SDM is a .tar archive -- extracting to $EXTRACT_DIR"
     mkdir -p "$EXTRACT_DIR"
-    tar -xf "$SDM_PATH" -C "$EXTRACT_DIR"
+    tar -xvf "$SDM_PATH" -C "$EXTRACT_DIR"
     # Some SDM tarballs wrap everything in one top-level directory instead
     # of storing the SDM's files directly at the archive root, which would
     # otherwise leave the real SDM one level too deep; flatten that case so
