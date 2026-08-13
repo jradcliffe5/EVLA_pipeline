@@ -195,7 +195,7 @@
              all target spws) and, if spectral-line spws were identified,
              <vis>_targets.ms as well. Not exported by hifv_exportdata's
              exportmses (that flag exports every MS in the context, not just
-             this one) -- run_vla_pipeline.slurm tars the split MS(es) it
+             this one) run_vla_pipeline.slurm tars the split MS(es) it
              finds in the run dir into products/ after the CASA run. -->
         <Command xmlns="">hifv_mstransform</Command>
         <ParameterSet>
