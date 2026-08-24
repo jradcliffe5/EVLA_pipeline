@@ -97,8 +97,10 @@ set -euo pipefail
 # --------------------------------------------------------------------------
 # Site-specific paths -- edit if you move the CASA distribution or project.
 # --------------------------------------------------------------------------
-PROJECT_ROOT="${PROJECT_ROOT:-/scratch/jradcliffe5/TLOW0001}"
-CASA_ROOT="${CASA_ROOT:-$PROJECT_ROOT/casa-6.6.6-18-pipeline-2025.1.0.36-py3.10.el8}"
+SOFTWARE_ROOT="${SOFTWARE_ROOT:-/scratch/jradcliffe5/GOODSN-VLA-L}"
+[ -f "$SOFTWARE_ROOT/site.env" ] && . "$SOFTWARE_ROOT/site.env"
+PROJECT_ROOT="${PROJECT_ROOT:-/scratch/jradcliffe5/GOODSN-VLA-L/TLOW0001}"
+CASA_ROOT="${CASA_ROOT:-$SOFTWARE_ROOT/casa-6.6.6-18-pipeline-2025.1.0.36-py3.10.el8}"
 CASA="$CASA_ROOT/bin/casa"
 # Batch/SLURM nodes have no X server, but casaplotms (used throughout the
 # weblog stages) hard-requires a DISPLAY to be set, or it raises
@@ -107,7 +109,7 @@ CASA="$CASA_ROOT/bin/casa"
 # user-locally via micromamba (no root needed) -- see tools/README (or ask
 # Claude) if it's missing. Provisioned with:
 #   tools/bin/micromamba create -y -n xvfb -c conda-forge xorg-xvfb-server
-XVFB_ENV="${XVFB_ENV:-$PROJECT_ROOT/tools/micromamba_root/envs/xvfb}"
+XVFB_ENV="${XVFB_ENV:-$SOFTWARE_ROOT/tools/micromamba_root/envs/xvfb}"
 XVFB_BIN="$XVFB_ENV/bin/Xvfb"
 
 usage() {
