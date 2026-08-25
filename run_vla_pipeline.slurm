@@ -54,6 +54,26 @@
 #                                Requires --cores >= 2. Default: off (plain casa).
 #   -h, --help                   Print usage and exit.
 #
+# Shutdown watchdog
+# -----------------
+# Under mpicasa the client rank does not exit once the pipeline is done -- the
+# MPI servers shut down cleanly and then rank 0 sits there until SLURM kills
+# the job at its time limit, which is how every mpicasa run of this script used
+# to end (TIMEOUT on a reduction that had actually succeeded hours earlier, and
+# afterok dependants stuck behind it). Two things now bound that, and neither
+# does anything to a run that exits on its own:
+#
+#   DRIVER_EXIT_GRACE  seconds the driver waits for CASA's own shutdown before
+#                      forcing the process out with os._exit. Default 300.
+#   CASA_EXIT_GRACE    seconds this script then waits before terminating the
+#                      CASA process tree itself, for a wedge the driver's timer
+#                      cannot escape. Default 900.
+#
+# Because a forced shutdown makes CASA's exit status meaningless, the driver
+# records the reduction's real result in $RUNDIR/pipeline_driver_status and
+# that is what the job exits with; CASA's status is used only when the run died
+# before the recipe returned.
+#
 # Examples
 # --------
 #   sbatch run_vla_pipeline.slurm \
@@ -313,9 +333,23 @@ echo "=========================================================="
 # Written into the run directory (not /tmp) so it's kept alongside the
 # weblog/products for that run, for provenance.
 # --------------------------------------------------------------------------
+# DRIVER_STATUS_FILE is the driver's own record of whether the reduction
+# succeeded, written the moment the recipe returns. It exists because under
+# mpicasa the exit status of the outer command cannot be trusted to mean
+# anything about the pipeline (see the shutdown watchdog below), so the shell
+# needs a statement of the result from the process that actually knows it.
+DRIVER_STATUS_FILE="$RUNDIR/pipeline_driver_status"
+rm -f "$DRIVER_STATUS_FILE"
+# How long rank 0 gets to shut itself down after the recipe is finished before
+# the driver stops waiting and exits the hard way. Observed clean MPI shutdown
+# is ~15 s; this is deliberately far looser than that.
+DRIVER_EXIT_GRACE="${DRIVER_EXIT_GRACE:-300}"
+
 DRIVER="$RUNDIR/pipeline_driver.py"
 cat > "$DRIVER" <<PYEOF
+import os
 import sys
+import threading
 import traceback
 
 import pipeline.recipereducer as recipereducer
@@ -324,12 +358,48 @@ vis = [r"$SDM_PATH"]
 procedure = "$PROCEDURE"
 
 print(f"[pipeline_driver] vis={vis} procedure={procedure}", flush=True)
+status = 0
 try:
     context = recipereducer.reduce(vis=vis, procedure=procedure)
 except Exception:
     traceback.print_exc()
-    sys.exit(1)
-print("[pipeline_driver] pipeline run finished.", flush=True)
+    status = 1
+else:
+    print("[pipeline_driver] pipeline run finished.", flush=True)
+
+# Record the result before doing anything that might not survive: from here on
+# the process may be exited abruptly, by this script or by the shell.
+try:
+    with open(r"$DRIVER_STATUS_FILE", "w") as fh:
+        fh.write(str(status))
+except OSError:
+    traceback.print_exc()
+
+# Under mpicasa the client rank does not die once the recipe is done. Its MPI
+# shutdown runs fine -- all the server engines log "Exiting" a few seconds
+# after the line above -- and then rank 0 sits in interpreter shutdown until
+# SLURM kills the job at the wall clock. Every mpicasa run of this script has
+# ended that way, hours after the science finished, and the resulting TIMEOUT
+# state also leaves every afterok dependant stuck on a pipeline that actually
+# succeeded.
+#
+# So: return normally, let CASA shut the MPI environment down the way it wants
+# to, and arm a timer to force the exit if that never completes. On a healthy
+# run the process is gone long before the timer fires and none of this is
+# reached. os._exit is what makes it work -- it skips interpreter shutdown,
+# atexit handlers, thread joins and all, which is the part that hangs. Nothing
+# is lost by skipping them here: the context, weblog and products were all
+# written by reduce() before this point.
+def _force_exit():
+    sys.stdout.flush()
+    sys.stderr.flush()
+    print("[pipeline_driver] shutdown did not complete within"
+          " $DRIVER_EXIT_GRACE s -- forcing exit.", file=sys.stderr, flush=True)
+    os._exit(status)
+
+_timer = threading.Timer($DRIVER_EXIT_GRACE, _force_exit)
+_timer.daemon = True
+_timer.start()
 PYEOF
 
 CASA_LOG="$RUNDIR/casa-pipeline-${JOBID}.log"
@@ -373,6 +443,31 @@ cleanup_xvfb() {
 }
 trap cleanup_xvfb EXIT
 
+# --------------------------------------------------------------------------
+# Run CASA under a shutdown watchdog.
+#
+# The driver arms its own forced exit (see above), which handles the hang as
+# long as the client rank's Python can still run a timer thread. This is the
+# backstop for when it cannot -- a wedge inside mpirun itself, or below Python
+# in a C call holding the GIL. Once the driver has recorded its result, CASA
+# gets CASA_EXIT_GRACE seconds to go away on its own; after that the process
+# tree is taken down here.
+#
+# Killing walks the tree from the CASA pid rather than signalling a process
+# group: this script's own children share its group under SLURM (no job
+# control in a non-interactive shell), so `kill -- -$pid` would take the batch
+# script down with it.
+# --------------------------------------------------------------------------
+CASA_EXIT_GRACE="${CASA_EXIT_GRACE:-900}"
+
+kill_tree() {   # kill_tree <signal> <pid>
+    local sig="$1" pid="$2" child
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_tree "$sig" "$child"
+    done
+    kill "-$sig" "$pid" 2>/dev/null || true
+}
+
 set +e
 if [ "$USE_MPI" -eq 1 ]; then
     # --oversubscribe: outside a real SLURM allocation (e.g. this script run
@@ -382,12 +477,52 @@ if [ "$USE_MPI" -eq 1 ]; then
     # N_MPI_RANKS, mpirun hard-errors ("not enough slots") instead of running.
     # Oversubscribing just relaxes that check/binding; it's a no-op when
     # --cores/N_MPI_RANKS actually fits within the allocation.
-    "$MPICASA" -n "$N_MPI_RANKS" --oversubscribe "$CASA" --pipeline --nogui --nologger --log2term --logfile "$CASA_LOG" -c "$DRIVER"
+    "$MPICASA" -n "$N_MPI_RANKS" --oversubscribe "$CASA" --pipeline --nogui --nologger --log2term --logfile "$CASA_LOG" -c "$DRIVER" &
 else
-    "$CASA" --pipeline --nogui --nologger --log2term --logfile "$CASA_LOG" -c "$DRIVER"
+    "$CASA" --pipeline --nogui --nologger --log2term --logfile "$CASA_LOG" -c "$DRIVER" &
 fi
-status=$?
+CASA_PID=$!
+
+# $SECONDS at the moment the driver recorded its result, or 0 while it has not.
+# Nothing is enforced before then: the recipe itself is allowed to take as long
+# as the job's time limit permits, and always was.
+finished_at=0
+forced=0
+while kill -0 "$CASA_PID" 2>/dev/null; do
+    if [ "$finished_at" -eq 0 ] && [ -f "$DRIVER_STATUS_FILE" ]; then
+        finished_at=$SECONDS
+    fi
+    if [ "$finished_at" -ne 0 ] && [ $((SECONDS - finished_at)) -ge "$CASA_EXIT_GRACE" ]; then
+        echo "WARNING: CASA (pid $CASA_PID) still running $CASA_EXIT_GRACE s after the" \
+             "pipeline finished -- terminating it. The reduction itself is complete;" \
+             "this is the known mpicasa shutdown hang." >&2
+        kill_tree TERM "$CASA_PID"
+        sleep 60
+        kill -0 "$CASA_PID" 2>/dev/null && kill_tree KILL "$CASA_PID"
+        forced=1
+        break
+    fi
+    sleep 10
+done
+wait "$CASA_PID"
+casa_status=$?
 set -e
+
+# Which status counts. The driver's file is the only record of whether the
+# reduction succeeded; CASA's exit status is not, since a forced or killed
+# shutdown reports failure for a run whose science was finished and written
+# out minutes earlier. So the file wins whenever it exists, and CASA's status
+# is the fallback for a run that died before the recipe returned -- a real
+# crash, an OOM kill, a bad SDM.
+driver_status=""
+if [ -f "$DRIVER_STATUS_FILE" ]; then
+    driver_status=$(tr -dc '0-9' < "$DRIVER_STATUS_FILE")
+fi
+if [ -n "$driver_status" ]; then
+    status=$driver_status
+else
+    status=$casa_status
+fi
 
 # --------------------------------------------------------------------------
 # Package the split measurement set(s) into products/, if the recipe
@@ -419,7 +554,7 @@ fi
 
 echo "=========================================================="
 echo "   Finished  : $(date)"
-echo "   CASA exit : $status"
+echo "   CASA exit : $status  (driver: ${driver_status:-none}, process: $casa_status$([ "$forced" -eq 1 ] && echo ", terminated by shutdown watchdog"))"
 echo "   Log file  : $CASA_LOG"
 echo "   Weblog    : $(find "$RUNDIR" -maxdepth 1 -iname 'pipeline-*' -o -iname 'weblog' 2>/dev/null | head -1)"
 echo "   Products  : $PRODUCTS_DIR"
